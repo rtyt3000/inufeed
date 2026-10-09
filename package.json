@@ -1,0 +1,19 @@
+{
+  "name": "inu-feed",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "inu build",
+    "check": "inu check",
+    "dev": "inu dev",
+    "build:feed": "inu check inufeed && inu build inufeed",
+    "watch:feed": "inu build inufeed -w",
+    "dev:feed": "inu dev inufeed",
+    "push:feed": "inu push inufeed"
+  },
+  "devDependencies": {
+    "@inugram/cli": "^44.0.0",
+    "@inugram/plugin-types": "^44.0.0",
+    "typescript": "^5.9.3"
+  }
+}
