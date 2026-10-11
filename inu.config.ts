@@ -8,9 +8,9 @@ export default defineConfig({
         id: 'rtyt300.frinufeed',
         name: 'Inugram feed',
         author: '@rtyt3000',
-        version: '1.0.0',
+        version: '1.0.1',
         description: 'Turns a chat folder into a single feed of its channels and hides it from the folder tabs',
-        icon: 'inu://bot',
+        icon: 'tg://emoji?id=5936256964760707620',
         grants: [
           'account.read(peers, dialogs, history)',
           'invokeRpc(messages.getDialogFilters, messages.updateDialogFilter)',
