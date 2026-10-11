@@ -6,7 +6,7 @@ export default defineConfig({
       entry: 'src/feed/index.ts',
       manifest: {
         id: 'rtyt300.frinufeed',
-        name: 'Inugram feed',
+        name: 'Frinugram feed',
         author: '@rtyt3000',
         version: '1.0.1',
         description: 'Turns a chat folder into a single feed of its channels and hides it from the folder tabs',
@@ -17,7 +17,7 @@ export default defineConfig({
           'interceptRpc(messages.getDialogFilters, messages.updateDialogFilter, messages.getHistory, updates.getChannelDifference, channels.readHistory, channels.getFullChannel, channels.getChannels, messages.getPeerDialogs, messages.toggleDialogPin, messages.reorderPinnedDialogs, account.updateNotifySettings, folders.editPeerFolders, channels.leaveChannel)',
           'interceptUpdate(updateDialogFilter)',
           'onUpdate(new_message, edit_message, delete_message)',
-          // the folder editor button and refreshing the app's folders have no public API
+          // feed rows in the chat list, reply taps and refreshing the app's folders have no public API
           'unsafe.jvm',
           'unsafe.xposed',
         ],

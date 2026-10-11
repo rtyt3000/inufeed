@@ -83,18 +83,6 @@ export function removeFeedFolder(userId: number, folderId: number): void {
   setFeedFolders(userId, getFeedFolders(userId).filter(f => f.id !== folderId))
 }
 
-/** feed folders open in the app's folder editor, which may save them; `userId:folderId` */
-const editing = new Set<string>()
-
-export function isFeedFolderEditAllowed(userId: number, folderId: number): boolean {
-  return editing.has(`${userId}:${folderId}`)
-}
-
-export function allowFeedFolderEdit(userId: number, folderId: number, allowed: boolean): void {
-  if (allowed) editing.add(`${userId}:${folderId}`)
-  else editing.delete(`${userId}:${folderId}`)
-}
-
 /** Makes the app refetch its folders, which applies a changed feed folder to the tabs */
 export function reloadAppFolders(accountSlot: number): void {
   const controller = inu.jvm.cls('org.telegram.messenger.MessagesController').callStatic('getInstance', accountSlot)
@@ -244,26 +232,16 @@ export function hideFeedFolderFromTabs(onFeedFolderEdited: () => void): void {
     }
 
     // the app doesn't know the hidden folders, so a new folder could get one's id and overwrite it.
-    // Edits through the folder editor the plugin opened are the exception
-    if (!editing.has(`${userId}:${folderId}`)) {
-      // the app numbers a new folder after the ones it knows, which can be a hidden one's number
-      if (!ctx.request.filter) throw new inu.RpcError(400, 'FILTER_ID_INVALID')
-      const taken = new Set((await listFolders(ctx.account)).map(f => f.id))
-      let free = 2
-      while (taken.has(free)) free++
-      const { folder } = takeStandIns(userId, ctx.request.filter)
-      folder.id = free
-      const result = await next({ ...structuredClone(ctx.request), id: free, filter: folder as tl.RawDialogFilter })
-      // the app keeps the number it chose until it refetches
-      reloadAppFolders(ctx.account.id)
-      onFeedFolderEdited()
-      return result
-    }
-    const deleted = !ctx.request.filter
-    const title = ctx.request.filter?.title.text
-    const result = await next()
-    if (deleted) removeFeedFolder(userId, folderId)
-    else if (title !== undefined) updateFeedFolder(userId, folderId, { title })
+    // The app numbers a new folder after the ones it knows, which can be a hidden one's number
+    if (!ctx.request.filter) throw new inu.RpcError(400, 'FILTER_ID_INVALID')
+    const taken = new Set((await listFolders(ctx.account)).map(f => f.id))
+    let free = 2
+    while (taken.has(free)) free++
+    const { folder } = takeStandIns(userId, ctx.request.filter)
+    folder.id = free
+    const result = await next({ ...structuredClone(ctx.request), id: free, filter: folder as tl.RawDialogFilter })
+    // the app keeps the number it chose until it refetches
+    reloadAppFolders(ctx.account.id)
     onFeedFolderEdited()
     return result
   })

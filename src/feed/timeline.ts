@@ -230,12 +230,6 @@ class Merger {
 }
 
 let current: inu.ui.ChatHistory | null = null
-let currentFeed: { slot: number, folderId: number, title: string } | null = null
-
-/** The open feed screen showing `title`, if any */
-export function openFeedWithTitle(title: string): { slot: number, folderId: number } | null {
-  return currentFeed && currentFeed.title === title ? currentFeed : null
-}
 
 export async function openFeed(
   account: inu.Account,
@@ -388,7 +382,6 @@ export async function openFeed(
     ],
   })
   current = history
-  currentFeed = { slot: account.id, folderId: folder.id, title: folder.title }
 
   const live = [
     inu.onNewMessage((message, from) => {
@@ -419,10 +412,7 @@ export async function openFeed(
       clearTimeout(readTimer)
       flushRead()
     }
-    if (current === history) {
-      current = null
-      currentFeed = null
-    }
+    if (current === history) current = null
   }).catch((e) => {
     console.warn('feed: close handling failed', e)
   })

@@ -1,18 +1,14 @@
-// a feed's "profile": what a group's profile is to a group, with the feed's channels in place of its
-// members, on a native page. It edits the folder behind the feed through the plugin's own requests,
-// which the plugin's interceptors don't see
+// a feed's "profile": its channels, avatar, icon and name, on a settings page. It edits the folder
+// behind the feed through the plugin's own requests, which the plugin's interceptors don't see
 
-import { openNativePage } from '../shared/native-ui.js'
-import type { NativeItem } from '../shared/native-ui.js'
-import { FOLDER_ICONS, folderIconDrawable, getFeedAvatar, openAvatarPicker, useFolderIcon } from './feed-avatar.js'
-import { STAND_IN_BASE, getFeedFolder, listFolders, updateFeedFolder } from './folders.js'
+import { FOLDER_ICONS, getFeedAvatar, pickAvatar, removeFeedAvatar, useFolderIcon } from './feed-avatar.js'
+import { getFeedFolder, listFolders, updateFeedFolder } from './folders.js'
 import type { ListedFolder } from './folders.js'
 
 export interface FeedProfileActions {
   /** the feed's channels, title or avatar changed; resolves once the chat list has them */
   changed(): Promise<void>
   chooseTabs(): void
-  advancedSettings(): void
   restore(): void
 }
 
@@ -128,31 +124,6 @@ export function openFeedProfile(account: inu.Account, folderId: number, actions:
     }
   }
 
-  /** the app's folder icons, on a page of their own */
-  function chooseIcon(): void {
-    const current = folder?.emoticon?.replace(/️/g, '')
-    const pick = (emoji: string | undefined): void => {
-      picker.close()
-      if (emoji !== current) setIcon(emoji).catch(report('setting the icon'))
-    }
-    const picker = openNativePage({
-      title: 'Иконка папки',
-      items: () => [
-        { type: 'hint', text: 'Иконка видна на вкладке папки и может стать аватаркой ленты.' },
-        ...FOLDER_ICONS.map(([emoji, drawable, name]): NativeItem => ({
-          type: 'button',
-          text: name,
-          icon: drawable,
-          value: emoji === current ? '✓' : undefined,
-          style: emoji === current ? 'accent' : undefined,
-          onClick: () => pick(emoji),
-        })),
-        { type: 'hint' },
-        { type: 'button', text: 'Без иконки', icon: 'msg_delete', onClick: () => pick(undefined) },
-      ],
-    })
-  }
-
   async function rename(): Promise<void> {
     const title = (await inu.ui.prompt({ title: 'Название ленты', value: folder?.title.text ?? '', selectAll: true }))?.trim()
     if (!title || title === folder?.title.text) return
@@ -170,103 +141,111 @@ export function openFeedProfile(account: inu.Account, folderId: number, actions:
     actions.changed().then(() => page.invalidate()).catch(report('updating the avatar'))
   }
 
-  const page = openNativePage({
+  const iconNames = ['Без иконки', ...FOLDER_ICONS.map(([, , name]) => name)]
+  const iconIndex = (): number => {
+    const current = folder?.emoticon?.replace(/️/g, '')
+    return FOLDER_ICONS.findIndex(([emoji]) => emoji === current) + 1
+  }
+
+  const page = inu.ui.settingsPage({
     title: 'Лента',
-    items: (): NativeItem[] => {
+    transient: true,
+    items: () => {
       const feed = getFeedFolder(account.userId, folderId)
       const ids = channels()
+      const hasAvatar = getFeedAvatar(account.userId, folderId) !== null
       return [
-        {
-          type: 'profile',
-          account: account.id,
-          chatId: STAND_IN_BASE + folderId,
-          title: feed?.title ?? '',
-          subtitle: folder ? channelsText(ids.length) : 'загрузка…',
-        },
-        { type: 'header', text: 'Каналы' },
-        ...ids.map((id): NativeItem => {
-          const openChannel = (): void => inu.ui.openPage({ type: 'chat', dialogId: id, account: account.id })
-          return {
-            type: 'chat',
-            account: account.id,
-            chatId: inu.utils.peers.parseMarkedPeerId(id).id,
-            onClick: openChannel,
-            onLongClick: () => {
+        inu.ui.header(`Каналы · ${folder ? channelsText(ids.length) : 'загрузка…'}`),
+        ...ids.map((id) => {
+          const chat = account.getChat(id)
+          return inu.ui.button({
+            id: `channel-${id}`,
+            text: (chat && 'title' in chat ? chat.title : undefined) ?? 'Канал',
+            icon: inu.icons.avatar(id, { account: account.id }),
+            onClick: () => inu.ui.openPage({ type: 'chat', dialogId: id, account: account.id }),
+            onSecondaryClick: () => {
               removeChannel(id).catch(report('removing a channel'))
             },
-          }
+          })
         }),
-        {
-          type: 'button',
+        inu.ui.button({
+          id: 'add-channels',
           text: 'Добавить каналы',
-          icon: 'msg_add',
-          style: 'accent',
+          icon: inu.icons.common('channel'),
           onClick: () => {
             chooseChannels().catch(report('choosing channels'))
           },
-        },
-        { type: 'hint', text: 'Удерживайте канал, чтобы убрать его из ленты.' },
-        { type: 'header', text: 'Лента' },
-        {
-          type: 'button',
-          text: getFeedAvatar(account.userId, folderId) ? 'Сменить аватарку' : 'Выбрать аватарку',
-          icon: 'msg_addphoto',
-          onClick: () => openAvatarPicker(account, folderId, avatarChanged),
-        },
-        {
-          type: 'button',
+        }),
+        inu.ui.separator('Удерживайте канал, чтобы убрать его из ленты.'),
+        inu.ui.header('Лента'),
+        inu.ui.button({
+          id: 'avatar',
+          text: hasAvatar ? 'Сменить аватарку' : 'Выбрать аватарку',
+          onClick: () => {
+            pickAvatar(account, folderId).then((changed) => {
+              if (changed) avatarChanged()
+            }).catch(report('picking the avatar'))
+          },
+        }),
+        ...(hasAvatar
+          ? [inu.ui.button({
+              id: 'avatar-remove',
+              text: 'Убрать аватарку',
+              danger: true,
+              onClick: () => {
+                removeFeedAvatar(account.userId, folderId)
+                avatarChanged()
+              },
+            })]
+          : []),
+        inu.ui.select({
+          id: 'icon',
           text: 'Иконка папки',
-          icon: folderIconDrawable(folder?.emoticon),
-          value: FOLDER_ICONS.find(([emoji]) => emoji === folder?.emoticon?.replace(/️/g, ''))?.[2] ?? 'нет',
-          onClick: () => chooseIcon(),
-        },
-        {
-          type: 'button',
+          items: iconNames,
+          selected: iconIndex(),
+          onChange: (index) => {
+            setIcon(index === 0 ? undefined : FOLDER_ICONS[index - 1][0]).catch(report('setting the icon'))
+          },
+        }),
+        inu.ui.button({
+          id: 'icon-avatar',
           text: 'Иконка папки как аватарка',
-          icon: 'msg_folders',
           onClick: () => {
             useFolderIcon(account, folderId).then((used) => {
               if (used) avatarChanged()
               else inu.ui.toast('У папки нет иконки')
             }).catch(report('using the folder icon'))
           },
-        },
-        {
-          type: 'button',
+        }),
+        inu.ui.button({
+          id: 'rename',
           text: 'Название',
-          icon: 'msg_edit',
           value: feed?.title ?? '',
+          icon: inu.icons.common('edit'),
           onClick: () => {
             rename().catch(report('renaming'))
           },
-        },
-        {
-          type: 'button',
+        }),
+        inu.ui.button({
+          id: 'tabs',
           text: 'Показывать в папках',
-          icon: 'msg_folders',
           value: String(feed?.showIn?.length ?? 0),
           onClick: () => actions.chooseTabs(),
-        },
-        {
-          type: 'button',
-          text: 'Все настройки папки',
-          icon: 'msg_settings',
-          onClick: () => actions.advancedSettings(),
-        },
-        { type: 'hint' },
-        {
-          type: 'button',
+        }),
+        inu.ui.separator(),
+        inu.ui.button({
+          id: 'restore',
           text: 'Вернуть папку во вкладки',
-          icon: 'msg_leave',
-          style: 'danger',
+          danger: true,
           onClick: () => {
-            page.close()
+            page.dispose()
             actions.restore()
           },
-        },
+        }),
       ]
     },
   })
+  inu.ui.openPage(page)
 
   loadFolder(account, folderId).then((loaded) => {
     folder = loaded

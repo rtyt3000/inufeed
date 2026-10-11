@@ -126,64 +126,13 @@ export async function useFolderIcon(account: inu.Account, folderId: number): Pro
   }
 }
 
-/** the pick in progress; the delegate class is shared, so it finds its pick here */
-let pending: { userId: number, slot: number, folderId: number, changed: () => void, updater: JavaObject } | null = null
-let delegateClass: DefinedClass | null = null
-
-function later(task: () => Promise<void> | void): void {
-  // app callbacks run on the UI thread, where plugin-thread APIs are unavailable
-  Promise.resolve().then(task).catch((e) => {
-    console.error('feed: avatar task failed', e)
-    inu.ui.toast('Не удалось сохранить аватарку')
-  })
-}
-
 /**
- * Opens the app's own photo picker, as for a group's photo: gallery, camera and cropping, plus
- * "delete" when the feed has an avatar. Nothing is uploaded; the cropped picture becomes the
- * feed's avatar. `changed` runs once the avatar changed
+ * Lets the user pick a picture for the feed; it never leaves the device. Resolves to whether the
+ * avatar changed
  */
-export function openAvatarPicker(account: inu.Account, folderId: number, changed: () => void): void {
-  const ImageUpdater = cls('org.telegram.ui.Components.ImageUpdater')
-  delegateClass ??= inu.jvm.defineClass({
-    interfaces: [cls('org.telegram.ui.Components.ImageUpdater$ImageUpdaterDelegate')],
-    methods: {
-      // called with the cropped picture, already saved in the app's cache
-      didUploadPhoto: (_self, _photo, _video, _start, _path, bigSize) => {
-        const pick = pending
-        if (!pick || !bigSize) return
-        const file = cls('org.telegram.messenger.FileLoader').callStatic('getInstance', pick.slot)
-          .call('getPathToAttach', bigSize, true)
-        const jpeg: Uint8Array = cls('java.nio.file.Files').callStatic('readAllBytes', file.call('toPath'))
-        later(async () => {
-          await saveAvatar(pick.userId, pick.folderId, jpeg)
-          pick.changed()
-        })
-      },
-    },
-  })
-
-  const updater = new ImageUpdater(false, ImageUpdater.getStaticField('FOR_TYPE_GROUP'), false)
-  // no upload: the picture stays on this device
-  updater.call('setUploadAfterSelect', false)
-  updater.call('setDelegate', new delegateClass())
-  pending = { userId: account.userId, slot: account.id, folderId, changed, updater }
-
-  const hasAvatar = getFeedAvatar(account.userId, folderId) !== null
-  const onDelete = inu.jvm.runnable(() => {
-    later(() => {
-      removeFeedAvatar(account.userId, folderId)
-      changed()
-    })
-  })
-  const TYPE_DEFAULT: number = ImageUpdater.getStaticField('TYPE_DEFAULT')
-  const LaunchActivity = cls('org.telegram.ui.LaunchActivity')
-  // a routine, as opening the menu may call back into the plugin right away
-  const open = inu.jvm.routine(function () {
-    const top = LaunchActivity.getLastFragment()
-    if (top === null) return
-    updater.parentFragment = top
-    updater.openMenu(hasAvatar, onDelete, null, TYPE_DEFAULT)
-  })
-  cls('org.telegram.messenger.AndroidUtilities').callStatic('runOnUIThread', open)
+export async function pickAvatar(account: inu.Account, folderId: number): Promise<boolean> {
+  const file = await inu.ui.pickFile({ accept: ['image/*'] })
+  if (!file) return false
+  await saveAvatar(account.userId, folderId, file)
+  return true
 }

@@ -1,9 +1,8 @@
 import { readFlag, writeFlag } from '../shared/storage.js'
 import { answerStandInRequests, isFeedChannel, openFeedOnTap, syncChatList } from './chat-list.js'
 import { openFeedProfile } from './feed-profile.js'
-import { addFeedButtonToFolderEditor } from './folder-editor.js'
-import { handleFolderSettings, openFolderSettings } from './folder-settings.js'
 import {
+  addFeedFolder,
   getFeedFolder,
   getFeedFolders,
   hideFeedFolderFromTabs,
@@ -13,7 +12,7 @@ import {
   updateFeedFolder,
 } from './folders.js'
 import { openRepliesInChannel } from './reply-taps.js'
-import { markFeedRead, openFeed, openFeedWithTitle } from './timeline.js'
+import { markFeedRead, openFeed } from './timeline.js'
 
 const MARK_READ_KEY = 'markRead'
 
@@ -36,13 +35,6 @@ function restore(account: inu.Account, folderId: number): void {
   if (folder) inu.ui.toast(`«${folder.title}» снова во вкладках`)
 }
 
-function folderSettings(account: inu.Account, folderId: number): void {
-  openFolderSettings(account, folderId).catch((e) => {
-    report('opening folder settings')(e)
-    inu.ui.toast('Не удалось открыть настройки папки')
-  })
-}
-
 function profile(account: inu.Account, folderId: number): void {
   openFeedProfile(account, folderId, {
     changed: async () => {
@@ -52,7 +44,6 @@ function profile(account: inu.Account, folderId: number): void {
     chooseTabs: () => {
       chooseTabs(account, folderId).catch(report('choosing tabs'))
     },
-    advancedSettings: () => folderSettings(account, folderId),
     restore: () => restore(account, folderId),
   })
 }
@@ -92,6 +83,26 @@ async function chooseTabs(account: inu.Account, folderId: number): Promise<void>
   resync()
 }
 
+async function makeFeed(account: inu.Account): Promise<void> {
+  const feedIds = new Set(getFeedFolders(account.userId).map(f => f.id))
+  const candidates = (await listFolders(account)).filter(f => !feedIds.has(f.id))
+  if (candidates.length === 0) {
+    inu.ui.toast('Нет папок, которые можно сделать лентой')
+    return
+  }
+  const index = await inu.ui.chooser({
+    title: 'Какая папка станет лентой?',
+    items: candidates.map(f => f.title.text),
+  })
+  if (index === null) return
+  const folder = candidates[index]
+  addFeedFolder(account.userId, { id: folder.id, title: folder.title.text })
+  reloadAppFolders(account.id)
+  await syncChatList()
+  settings.invalidate()
+  inu.ui.toast(`«${folder.title.text}» теперь один чат в списке чатов`)
+}
+
 async function feedMenu(account: inu.Account, folderId: number): Promise<void> {
   const feed = getFeedFolder(account.userId, folderId)
   if (!feed) return
@@ -125,7 +136,16 @@ const settings = inu.ui.settingsPage({
           feedMenu(account, folder.id).catch(report('feed menu'))
         },
       })),
-      inu.ui.separator('Чтобы сделать ленту, откройте настройки папки и нажмите «Показывать как ленту». Папка пропадёт из вкладок, а её каналы соберутся в один чат. Действует только на этом устройстве.'),
+      inu.ui.button({
+        id: 'make-feed',
+        text: 'Сделать ленту из папки',
+        icon: inu.icons.common('channel'),
+        onClick: () => {
+          makeFeed(account).catch(report('making a feed'))
+        },
+      }),
+      inu.ui.separator('Папка пропадёт из вкладок, а её каналы соберутся в один чат в списке чатов. Действует только на этом устройстве.'),
+
       inu.ui.check({
         id: 'markRead',
         text: 'Отмечать посты прочитанными',
@@ -142,8 +162,6 @@ const settings = inu.ui.settingsPage({
 inu.registerSettings(settings)
 
 hideFeedFolderFromTabs(resync)
-addFeedButtonToFolderEditor(resync)
-handleFolderSettings(openFeedWithTitle, (slot, folderId) => profile(inu.account(slot), folderId), resync)
 openFeedOnTap((slot, folderId) => open(inu.account(slot), folderId))
 openRepliesInChannel(isFeedChannel)
 // chat actions on a feed row, from the app's own menus and swipes
