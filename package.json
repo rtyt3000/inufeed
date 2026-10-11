@@ -6,10 +6,10 @@
     "build": "inu build",
     "check": "inu check",
     "dev": "inu dev",
-    "build:feed": "inu check inufeed && inu build inufeed",
-    "watch:feed": "inu build inufeed -w",
-    "dev:feed": "inu dev inufeed",
-    "push:feed": "inu push inufeed"
+    "build:feed": "inu check frinufeed && inu build frinufeed",
+    "watch:feed": "inu build frinufeed -w",
+    "dev:feed": "inu dev frinufeed",
+    "push:feed": "inu push frinufeed"
   },
   "devDependencies": {
     "@inugram/cli": "^44.0.0",

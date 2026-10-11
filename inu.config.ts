@@ -2,10 +2,10 @@ import { defineConfig } from '@inugram/cli'
 
 export default defineConfig({
   plugins: {
-    inufeed: {
+    frinufeed: {
       entry: 'src/feed/index.ts',
       manifest: {
-        id: 'ppsh.inufeed',
+        id: 'rtyt300.frinufeed',
         name: 'Inugram feed',
         author: '@rtyt3000',
         version: '1.0.0',
